@@ -62,7 +62,7 @@ def destinazione_locale(indirizzo):
 
 def nome_programma(eseguibile, argomenti):
     voce = eseguibile
-    if voce is None and argomenti:
+    if not voce and argomenti:  # su Windows il nome dell'applicazione può arrivare come "" invece di None
         voce = argomenti[0] if isinstance(argomenti, (list, tuple)) else str(argomenti).split()[0]
     nome = os.fsdecode(voce or "").strip().strip('"').replace("\\", "/").rsplit("/", 1)[-1].lower()
     return nome[:-4] if nome.endswith(".exe") else nome

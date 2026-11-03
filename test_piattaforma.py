@@ -154,6 +154,10 @@ class ProgrammiAmmessiTest(unittest.TestCase):
             audio.write_bytes(b"x")
             ok = ("_winapi.CreateProcess", (None, f'"C:\\ff\\ffmpeg.exe" -i "{audio}" -f s16le -', None))
             blocco_rete.controllo(*ok)
+            # Come arriva davvero su Windows: nome dell'applicazione vuoto, programma nella riga
+            blocco_rete.controllo("_winapi.CreateProcess", ("", f'ffmpeg -i "{audio}" -f s16le -', None))
+            with self.assertRaises(PermissionError):
+                blocco_rete.controllo("_winapi.CreateProcess", ("", "curl http://x", None))
             for riga in ('"C:\\ff\\ffmpeg.exe" -i http://x/a.mp3 -', "cmd.exe /c curl x"):
                 with self.assertRaises(PermissionError):
                     blocco_rete.controllo("_winapi.CreateProcess", (None, riga, None))
