@@ -79,10 +79,21 @@ def _testo(a):
     return os.fsdecode(a).strip().strip('"') if isinstance(a, (str, bytes, os.PathLike)) else str(a)
 
 
-def file_locale(percorso):
-    if percorso.startswith(("\\\\", "//")):  # UNC: \\server\cartella
+def percorso_di_rete(percorso):
+    r"""\\server\cartella o //server/cartella; su Windows anche \\?\UNC\server\... (percorso
+    esteso). \\?\D:\... e \\.\ sono invece percorsi locali con il prefisso esteso di Windows."""
+    p = percorso.replace("/", "\\") if sys.platform == "win32" or percorso.startswith("\\") else percorso
+    if p.upper().startswith("\\\\?\\UNC\\"):
+        return True
+    if p.startswith(("\\\\?\\", "\\\\.\\")):
         return False
-    return os.path.isfile(percorso) and not os.path.realpath(percorso).startswith(("\\\\", "//"))
+    return p.startswith(("\\\\", "//"))
+
+
+def file_locale(percorso):
+    if percorso_di_rete(percorso) or not os.path.isfile(percorso):
+        return False
+    return not percorso_di_rete(os.path.realpath(percorso))  # unità mappate su cartelle di rete
 
 
 # Solo le opzioni che servono davvero (whisperx: decodifica in s16le su stdout; ffprobe: durata).
@@ -94,48 +105,63 @@ OPZIONI_FFPROBE = {"-version": 0, "-hide_banner": 0, "-v": 1, "-loglevel": 1, "-
 VALORE_SEMPLICE = re.compile(r"^[A-Za-z0-9_.=,:-]+$")  # es. "error", "format=duration", "csv=p=0", "16000"
 
 
-def argomenti_locali(nome, elenco):
+def motivo_argomenti(nome, elenco):
+    """None se gli argomenti sono ammessi, altrimenti il motivo (per il messaggio d'errore)."""
     opzioni = OPZIONI_FFMPEG if nome == "ffmpeg" else OPZIONI_FFPROBE
     resto = elenco[1:]
     i = 0
     liberi = []
     while i < len(resto):
         a = resto[i]
-        if "://" in a or a.startswith(("\\\\", "//")) or PROTOCOLLO.match(a):
-            return False
+        if "://" in a or percorso_di_rete(a) or PROTOCOLLO.match(a):
+            return f"indirizzo di rete o protocollo «{a}»"
         if a.startswith("-") and a != "-":
             if a not in opzioni:
-                return False
+                return f"opzione non ammessa «{a}»"
             if opzioni[a]:
                 if i + 1 >= len(resto):
-                    return False
+                    return f"opzione «{a}» senza valore"
                 valore = resto[i + 1]
                 if a == "-i":
                     if not file_locale(valore):
-                        return False
+                        return f"ingresso che non è un file locale «{valore}»"
                 elif a == "-f":
                     if valore not in FORMATI_AMMESSI:
-                        return False
+                        return f"formato non ammesso «{valore}»"
                 elif not VALORE_SEMPLICE.match(valore) or PROTOCOLLO.match(valore):
-                    return False
+                    return f"valore non ammesso «{a} {valore}»"
                 i += 2
                 continue
         else:
             liberi.append(a)
         i += 1
-    if nome == "ffmpeg":
-        return all(a == "-" for a in liberi)  # unica uscita ammessa: lo stdout
-    return all(file_locale(a) for a in liberi)  # ffprobe: solo file locali
+    for a in liberi:
+        if nome == "ffmpeg" and a != "-":
+            return f"uscita diversa dallo stdout «{a}»"
+        if nome == "ffprobe" and not file_locale(a):
+            return f"ingresso che non è un file locale «{a}»"
+    return None
+
+
+def motivo_rifiuto(eseguibile, argomenti):
+    nome = nome_programma(eseguibile, argomenti)
+    if nome not in PROGRAMMI_AMMESSI:
+        return f"avvio di «{nome}»"
+    elenco = [_testo(a) for a in (argomenti if isinstance(argomenti, (list, tuple)) else [argomenti])]
+    if nome == "uname":
+        return None if all(a.startswith("-") for a in elenco[1:]) else "uname con argomenti"
+    motivo = motivo_argomenti(nome, elenco)
+    return f"{nome}: {motivo}" if motivo else None
 
 
 def programma_ammesso(eseguibile, argomenti):
-    nome = nome_programma(eseguibile, argomenti)
-    if nome not in PROGRAMMI_AMMESSI:
-        return False
-    elenco = [_testo(a) for a in (argomenti if isinstance(argomenti, (list, tuple)) else [argomenti])]
-    if nome == "uname":
-        return all(a.startswith("-") for a in elenco[1:])
-    return argomenti_locali(nome, elenco)
+    return motivo_rifiuto(eseguibile, argomenti) is None
+
+
+def controlla_avvio(evento, eseguibile, argomenti):
+    motivo = motivo_rifiuto(eseguibile, argomenti)
+    if motivo:
+        blocca(evento, f"avvio di un programma esterno ({motivo})")
 
 
 def blocca(evento, motivo):
@@ -154,19 +180,15 @@ def controllo(evento, argomenti):
         if not indirizzo_locale(host):
             raise socket.gaierror(socket.EAI_NONAME, f"WhisperLocal: risoluzione di nomi bloccata senza --online ({evento})")
     elif evento == "subprocess.Popen":
-        if not programma_ammesso(argomenti[0], argomenti[1]):
-            blocca(evento, f"avvio di «{nome_programma(argomenti[0], argomenti[1])}»")
+        controlla_avvio(evento, argomenti[0], argomenti[1])
     elif evento == "_winapi.CreateProcess":  # Windows: (nome applicazione, riga di comando, cartella)
         riga = argomenti[1] if len(argomenti) > 1 else None
         parti = _dividi_riga_windows(riga) if riga else []
-        if not programma_ammesso(argomenti[0], parti or [argomenti[0]]):
-            blocca(evento, "avvio di un programma esterno")
+        controlla_avvio(evento, argomenti[0], parti or [argomenti[0]])
     elif evento in ("os.exec", "os.posix_spawn"):  # (percorso, argomenti, ambiente)
-        if not programma_ammesso(argomenti[0], argomenti[1]):
-            blocca(evento, "avvio di un programma esterno")
+        controlla_avvio(evento, argomenti[0], argomenti[1])
     elif evento == "os.spawn":  # (modo, percorso, argomenti, ambiente)
-        if not programma_ammesso(argomenti[1], argomenti[2]):
-            blocca(evento, "avvio di un programma esterno")
+        controlla_avvio(evento, argomenti[1], argomenti[2])
     elif evento in ("os.system", "os.startfile", "os.forkpty"):
         blocca(evento, "avvio di un programma esterno")
 

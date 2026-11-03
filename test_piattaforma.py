@@ -19,13 +19,13 @@ import trascrivi
 PROGETTO = Path(__file__).resolve().parent
 
 
-def esegui_bloccato(codice):
+def esegui_bloccato(codice, env=None):
     """Esegue codice Python sotto blocco_rete.py e restituisce l'output."""
     with tempfile.TemporaryDirectory() as tmp:
         script = Path(tmp) / "prova.py"
         script.write_text(textwrap.dedent(codice), encoding="utf-8")
         risultato = subprocess.run([sys.executable, str(PROGETTO / "blocco_rete.py"), str(script)],
-                                   capture_output=True, text=True, encoding="utf-8", timeout=60)
+                                   capture_output=True, text=True, encoding="utf-8", timeout=60, env=env)
     return risultato
 
 
@@ -80,6 +80,29 @@ class BloccoReteTest(unittest.TestCase):
         """)
         self.assertIn("OK", risultato.stdout, risultato.stderr)
 
+    def test_ffmpeg_reale_come_whisperx_su_file_con_spazi(self):
+        import os
+        percorso = os.environ.get("PATH", "")
+        portatile = PROGETTO / "strumenti" / "ffmpeg" / "bin"
+        if portatile.is_dir():
+            percorso = str(portatile) + os.pathsep + percorso
+        ffmpeg = shutil.which("ffmpeg", path=percorso)
+        if not ffmpeg:
+            self.skipTest("ffmpeg non installato")
+        with tempfile.TemporaryDirectory() as tmp:
+            audio = Path(tmp) / "cartella con spazi" / "prova è.wav"
+            audio.parent.mkdir()
+            subprocess.run([ffmpeg, "-v", "error", "-f", "lavfi", "-i", "sine=duration=0.2", str(audio)], check=True)
+            risultato = esegui_bloccato(f"""
+                import subprocess, sys
+                cmd = ["ffmpeg", "-nostdin", "-threads", "0", "-i", {str(audio)!r}, "-f", "s16le",
+                       "-ac", "1", "-acodec", "pcm_s16le", "-ar", "16000", "-"]
+                out = subprocess.run(cmd, capture_output=True, check=True).stdout
+                print("BYTE", len(out))
+            """, env={**os.environ, "PATH": percorso})
+        self.assertIn("BYTE", risultato.stdout, risultato.stderr)
+        self.assertGreater(int(risultato.stdout.split("BYTE")[1]), 1000)
+
     def test_memoria_massima_scritta(self):
         with tempfile.TemporaryDirectory() as tmp:
             ram = Path(tmp) / "ram"
@@ -116,6 +139,14 @@ class ProgrammiAmmessiTest(unittest.TestCase):
                 self.assertTrue(blocco_rete.programma_ammesso(None, argomenti), argomenti)
             for argomenti in vietati:
                 self.assertFalse(blocco_rete.programma_ammesso(None, argomenti), argomenti)
+
+    def test_percorsi_estesi_di_windows(self):
+        self.assertFalse(blocco_rete.percorso_di_rete("\\\\?\\D:\\a\\prova ci.wav"))
+        self.assertFalse(blocco_rete.percorso_di_rete("\\\\.\\D:\\a"))
+        self.assertFalse(blocco_rete.percorso_di_rete("D:\\a\\b.wav"))
+        self.assertTrue(blocco_rete.percorso_di_rete("\\\\?\\UNC\\server\\c\\b.wav"))
+        self.assertTrue(blocco_rete.percorso_di_rete("\\\\server\\c\\b.wav"))
+        self.assertTrue(blocco_rete.percorso_di_rete("//server/c/b.wav"))
 
     def test_riga_di_comando_windows(self):
         with tempfile.TemporaryDirectory() as tmp:
