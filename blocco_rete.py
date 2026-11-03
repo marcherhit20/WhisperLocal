@@ -64,7 +64,7 @@ def destinazione_locale(indirizzo):
 def nome_programma(eseguibile, argomenti):
     voce = eseguibile
     if not voce and argomenti:  # su Windows il nome dell'applicazione può arrivare come "" invece di None
-        voce = argomenti[0] if isinstance(argomenti, (list, tuple)) else str(argomenti).split()[0]
+        voce = argomenti[0] if isinstance(argomenti, (list, tuple)) else (str(argomenti).split() or [""])[0]
     nome = os.fsdecode(voce or "").strip().strip('"').replace("\\", "/").rsplit("/", 1)[-1].lower()
     return nome[:-4] if nome.endswith(".exe") else nome
 
@@ -144,11 +144,28 @@ def motivo_argomenti(nome, elenco):
     return None
 
 
+def come_elenco(argomenti):
+    """Argomenti come elenco. Su Windows l'evento subprocess.Popen riceve la riga di comando
+    già unita in un unico testo (list2cmdline): va divisa, altrimenti gli argomenti sfuggono."""
+    if isinstance(argomenti, (list, tuple)):
+        return [_testo(a) for a in argomenti]
+    if argomenti is None:
+        return []
+    riga = os.fsdecode(argomenti) if isinstance(argomenti, (bytes, os.PathLike)) else str(argomenti)
+    if sys.platform == "win32":
+        return [_testo(a) for a in _dividi_riga_windows(riga)]
+    import shlex
+    try:
+        return shlex.split(riga)
+    except ValueError:
+        return riga.split()
+
+
 def motivo_rifiuto(eseguibile, argomenti):
-    nome = nome_programma(eseguibile, argomenti)
+    elenco = come_elenco(argomenti)
+    nome = nome_programma(eseguibile, elenco)
     if nome not in PROGRAMMI_AMMESSI:
         return f"avvio di «{nome}»"
-    elenco = [_testo(a) for a in (argomenti if isinstance(argomenti, (list, tuple)) else [argomenti])]
     if nome == "uname":
         return None if all(a.startswith("-") for a in elenco[1:]) else "uname con argomenti"
     motivo = motivo_argomenti(nome, elenco)
@@ -191,7 +208,7 @@ def controllo(evento, argomenti):
             _POPEN.approvato = False  # è il CreateProcess del Popen appena controllato
             return
         riga = argomenti[1] if len(argomenti) > 1 else None
-        parti = _dividi_riga_windows(riga) if isinstance(riga, str) and riga else []
+        parti = [_testo(a) for a in _dividi_riga_windows(riga)] if isinstance(riga, str) and riga else []
         if not parti:
             blocca(evento, f"avvio di un programma esterno (argomenti non riconosciuti: {repr(argomenti)[:300]})")
         controlla_avvio(evento, argomenti[0], parti)

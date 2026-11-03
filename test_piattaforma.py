@@ -140,6 +140,25 @@ class ProgrammiAmmessiTest(unittest.TestCase):
             for argomenti in vietati:
                 self.assertFalse(blocco_rete.programma_ammesso(None, argomenti), argomenti)
 
+    def test_riga_di_comando_unita_come_su_windows(self):
+        # Su Windows l'evento subprocess.Popen riceve la riga già unita da list2cmdline
+        with tempfile.TemporaryDirectory() as tmp:
+            audio = Path(tmp) / "cartella con spazi" / "prova è.wav"
+            audio.parent.mkdir()
+            audio.write_bytes(b"x")
+            buona = ["ffmpeg", "-nostdin", "-threads", "0", "-i", str(audio), "-f", "s16le", "-ac", "1",
+                     "-acodec", "pcm_s16le", "-ar", "16000", "-"]
+            cattive = [["ffmpeg", "-i", "http://esempio.it/a.mp3", "-"],
+                       ["ffmpeg", "-i", str(audio), "-filter_script:a", str(audio), "-f", "s16le", "-"],
+                       ['C:\\Program Files\\ffmpeg.exe', "-i", "\\\\server\\c\\a.mp3", "-"]]
+            for piattaforma in ("win32", sys.platform):
+                with patch.object(blocco_rete.sys, "platform", piattaforma):
+                    self.assertIsNone(blocco_rete.motivo_rifiuto(None, subprocess.list2cmdline(buona)))
+                    for cmd in cattive:
+                        self.assertIsNotNone(blocco_rete.motivo_rifiuto(None, subprocess.list2cmdline(cmd)), cmd)
+                    with self.assertRaises(PermissionError):
+                        blocco_rete.controllo("subprocess.Popen", (None, subprocess.list2cmdline(cattive[0]), None, None))
+
     def test_percorsi_estesi_di_windows(self):
         self.assertFalse(blocco_rete.percorso_di_rete("\\\\?\\D:\\a\\prova ci.wav"))
         self.assertFalse(blocco_rete.percorso_di_rete("\\\\.\\D:\\a"))
