@@ -20,15 +20,17 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: FFmpeg portatile (7.1 shared) in strumenti\ffmpeg
+      - name: FFmpeg portatile (gyan.dev release essentials) in strumenti\ffmpeg
         shell: pwsh
         run: |
-          $nome = "ffmpeg-n7.1-latest-win64-gpl-shared-7.1"
-          Invoke-WebRequest "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/$nome.zip" -OutFile ffmpeg.zip
+          Invoke-WebRequest "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile ffmpeg.zip
           Expand-Archive ffmpeg.zip -DestinationPath strumenti
-          Rename-Item "strumenti\$nome" ffmpeg
+          $cartella = Get-ChildItem strumenti -Directory | Where-Object { Test-Path "$($_.FullName)\bin\ffmpeg.exe" } | Select-Object -First 1
+          if (-not $cartella) { throw "ffmpeg.exe non trovato nello zip" }
+          Rename-Item $cartella.FullName ffmpeg
           Remove-Item ffmpeg.zip
-          strumenti\ffmpeg\bin\ffmpeg.exe -version | Select-Object -First 1
+          $versione = & strumenti\ffmpeg\bin\ffmpeg.exe -version
+          $versione[0]
 
       - name: Copie globali di ffmpeg sul runner (solo per informazione)
         shell: pwsh
@@ -52,7 +54,7 @@ jobs:
         shell: cmd
         run: .venv\Scripts\python.exe -c "import torch, torchaudio, whisperx, faster_whisper, ctranslate2, pyannote.audio, wordfreq, aiohttp; print('torch', torch.__version__, 'ctranslate2', ctranslate2.__version__)"
 
-      - name: TorchCodec con le DLL di FFmpeg (informativo, non serve a WhisperX)
+      - name: TorchCodec (informativo, non serve a WhisperX; con la build essentials di solito non carica)
         continue-on-error: true
         shell: cmd
         run: |

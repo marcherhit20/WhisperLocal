@@ -55,8 +55,8 @@ exit /b 1
 :senza_ffmpeg
 echo.
 echo Pacchetti installati, ma ffmpeg/ffprobe non sono stati trovati.
-echo Scarica ffmpeg-n7.1-latest-win64-gpl-shared-7.1.zip da
-echo   https://github.com/BtbN/FFmpeg-Builds/releases/tag/latest
+echo Scarica
+echo   https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
 echo estrai lo zip (tasto destro, Estrai tutto) e rinomina la cartella in modo da avere:
 echo   %~dp0strumenti\ffmpeg\bin\ffmpeg.exe
 echo   %~dp0strumenti\ffmpeg\bin\ffprobe.exe

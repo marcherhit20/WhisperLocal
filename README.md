@@ -55,9 +55,9 @@ non predefinito e va evitata con registrazioni riservate.
 2. **Scarica WhisperLocal**: su GitHub, *Code → Download ZIP*, ed estrai la cartella
    dove vuoi tenerla (non spostarla più dopo l'installazione). In alternativa
    `git clone`.
-3. **FFmpeg**: scarica `ffmpeg-n7.1-latest-win64-gpl-shared-7.1.zip` da
-   <https://github.com/BtbN/FFmpeg-Builds/releases/tag/latest>, estrailo e rinomina
-   la cartella in modo da avere `strumenti\ffmpeg\bin\ffmpeg.exe` dentro WhisperLocal.
+3. **FFmpeg**: scarica <https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip>,
+   estrailo (tasto destro → Estrai tutto) e sposta la cartella estratta dentro WhisperLocal
+   rinominandola, in modo da avere `strumenti\ffmpeg\bin\ffmpeg.exe` e `ffprobe.exe`.
    (Se `ffmpeg` è già installato e nel PATH, puoi saltare questo passo.)
 4. Doppio clic su **`installa.bat`**: crea `.venv` e installa i pacchetti con le
    versioni di `requirements.txt` (alcuni GB, diversi minuti). Su una rete aziendale
