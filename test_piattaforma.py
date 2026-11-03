@@ -158,6 +158,17 @@ class ProgrammiAmmessiTest(unittest.TestCase):
             blocco_rete.controllo("_winapi.CreateProcess", ("", f'ffmpeg -i "{audio}" -f s16le -', None))
             with self.assertRaises(PermissionError):
                 blocco_rete.controllo("_winapi.CreateProcess", ("", "curl http://x", None))
+            # CreateProcess subito dopo un Popen già controllato (qualunque forma abbiano gli argomenti)
+            blocco_rete.controllo("subprocess.Popen", (None, ["ffmpeg", "-i", str(audio), "-f", "s16le", "-"], None, None))
+            blocco_rete.controllo("_winapi.CreateProcess", (None, None, None))
+            # ...ma solo una volta: un CreateProcess diretto con argomenti illeggibili è bloccato
+            with self.assertRaises(PermissionError):
+                blocco_rete.controllo("_winapi.CreateProcess", (None, None, None))
+            # e un Popen rifiutato non autorizza il CreateProcess successivo
+            with self.assertRaises(PermissionError):
+                blocco_rete.controllo("subprocess.Popen", (None, ["curl", "x"], None, None))
+            with self.assertRaises(PermissionError):
+                blocco_rete.controllo("_winapi.CreateProcess", (None, None, None))
             for riga in ('"C:\\ff\\ffmpeg.exe" -i http://x/a.mp3 -', "cmd.exe /c curl x"):
                 with self.assertRaises(PermissionError):
                     blocco_rete.controllo("_winapi.CreateProcess", (None, riga, None))

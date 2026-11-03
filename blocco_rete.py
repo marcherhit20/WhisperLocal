@@ -28,6 +28,7 @@ import re
 import runpy
 import socket
 import sys
+import threading
 
 NOMI_LOCALI = {"localhost", "localhost.localdomain", "ip6-localhost", ""}
 PROGRAMMI_AMMESSI = {"ffmpeg", "ffprobe", "uname"}  # uname: platform.processor() su macOS/Linux
@@ -158,6 +159,9 @@ def programma_ammesso(eseguibile, argomenti):
     return motivo_rifiuto(eseguibile, argomenti) is None
 
 
+_POPEN = threading.local()
+
+
 def controlla_avvio(evento, eseguibile, argomenti):
     motivo = motivo_rifiuto(eseguibile, argomenti)
     if motivo:
@@ -181,10 +185,16 @@ def controllo(evento, argomenti):
             raise socket.gaierror(socket.EAI_NONAME, f"WhisperLocal: risoluzione di nomi bloccata senza --online ({evento})")
     elif evento == "subprocess.Popen":
         controlla_avvio(evento, argomenti[0], argomenti[1])
+        _POPEN.approvato = True  # su Windows segue subito, nello stesso thread, CreateProcess
     elif evento == "_winapi.CreateProcess":  # Windows: (nome applicazione, riga di comando, cartella)
+        if getattr(_POPEN, "approvato", False):
+            _POPEN.approvato = False  # è il CreateProcess del Popen appena controllato
+            return
         riga = argomenti[1] if len(argomenti) > 1 else None
-        parti = _dividi_riga_windows(riga) if riga else []
-        controlla_avvio(evento, argomenti[0], parti or [argomenti[0]])
+        parti = _dividi_riga_windows(riga) if isinstance(riga, str) and riga else []
+        if not parti:
+            blocca(evento, f"avvio di un programma esterno (argomenti non riconosciuti: {repr(argomenti)[:300]})")
+        controlla_avvio(evento, argomenti[0], parti)
     elif evento in ("os.exec", "os.posix_spawn"):  # (percorso, argomenti, ambiente)
         controlla_avvio(evento, argomenti[0], argomenti[1])
     elif evento == "os.spawn":  # (modo, percorso, argomenti, ambiente)
