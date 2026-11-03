@@ -1,0 +1,120 @@
+# Prova automatica su Windows: installazione con installa.bat, FFmpeg portatile in strumenti\,
+# test, blocco della rete e una trascrizione completa offline (con secondo parere).
+name: Windows
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      WHISPERLOCAL_SENZA_PAUSA: "1"
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: FFmpeg portatile (7.1 shared) in strumenti\ffmpeg
+        shell: pwsh
+        run: |
+          $nome = "ffmpeg-n7.1-latest-win64-gpl-shared-7.1"
+          Invoke-WebRequest "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/$nome.zip" -OutFile ffmpeg.zip
+          Expand-Archive ffmpeg.zip -DestinationPath strumenti
+          Rename-Item "strumenti\$nome" ffmpeg
+          Remove-Item ffmpeg.zip
+          strumenti\ffmpeg\bin\ffmpeg.exe -version | Select-Object -First 1
+
+      - name: Copie globali di ffmpeg sul runner (solo per informazione)
+        shell: pwsh
+        run: |
+          Get-Command ffmpeg, ffprobe -All -ErrorAction SilentlyContinue | ForEach-Object { "Globale: $($_.Source)" }
+
+      - uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: pip-${{ hashFiles('requirements.txt') }}
+
+      - name: Installazione (installa.bat)
+        shell: cmd
+        run: installa.bat
+
+      - name: Il programma usa proprio FFmpeg portatile (non una copia globale)
+        shell: cmd
+        run: .venv\Scripts\python.exe -c "import shutil, trascrivi; trascrivi.prepara_ambiente(); p = [shutil.which(n) for n in ('ffmpeg', 'ffprobe')]; print(p); assert all(x and 'strumenti' in x for x in p), p"
+
+      - name: Import e versioni
+        shell: cmd
+        run: .venv\Scripts\python.exe -c "import torch, torchaudio, whisperx, faster_whisper, ctranslate2, pyannote.audio, wordfreq, aiohttp; print('torch', torch.__version__, 'ctranslate2', ctranslate2.__version__)"
+
+      - name: TorchCodec con le DLL di FFmpeg (informativo, non serve a WhisperX)
+        continue-on-error: true
+        shell: cmd
+        run: |
+          set "PATH=%CD%\strumenti\ffmpeg\bin;%PATH%"
+          strumenti\ffmpeg\bin\ffmpeg.exe -v error -f lavfi -i sine=frequency=440:duration=1 -ar 16000 tono.wav
+          .venv\Scripts\python.exe -c "import os; os.add_dll_directory(os.path.abspath(r'strumenti\ffmpeg\bin')); from torchcodec.decoders import AudioDecoder; c = AudioDecoder('tono.wav').get_all_samples(); print('TorchCodec OK', tuple(c.data.shape), c.sample_rate)"
+
+      - name: Test
+        shell: cmd
+        run: .venv\Scripts\python.exe -m unittest -v
+
+      - name: Aiuto della riga di comando
+        shell: cmd
+        run: trascrivi.bat --help
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~\.cache\huggingface
+            ~\.cache\torch
+            ~\AppData\Roaming\nltk_data
+          key: modelli-${{ hashFiles('requirements.txt', 'prepara_modelli.py') }}
+
+      - name: Download dei modelli (prepara_modelli.py --online)
+        shell: cmd
+        run: .venv\Scripts\python.exe prepara_modelli.py --online
+
+      - name: Controllo offline dei modelli sotto blocco della rete
+        shell: cmd
+        run: .venv\Scripts\python.exe blocco_rete.py prepara_modelli.py
+
+      - name: Audio di prova (sintesi vocale di Windows)
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Speech
+          $voce = New-Object System.Speech.Synthesis.SpeechSynthesizer
+          New-Item -ItemType Directory -Force input | Out-Null
+          $voce.SetOutputToWaveFile("$PWD\input\prova ci.wav")
+          $voce.Speak("Buongiorno a tutti. Questa e una prova automatica di trascrizione. Uno, due, tre, quattro, cinque. Grazie e arrivederci.")
+          $voce.Dispose()
+          Get-Item "input\prova ci.wav" | Select-Object Name, Length
+
+      - name: Trascrizione completa offline (trascrivi.bat, con secondo parere)
+        shell: cmd
+        run: trascrivi.bat "input\prova ci.wav"
+
+      - name: Risultati attesi
+        shell: pwsh
+        run: |
+          $principale = "output\prova ci_large-v3-turbo"
+          foreach ($f in "prova ci.json", "prova ci.txt", "prova ci.srt", "da_verificare.txt", "da_verificare.json", "run.log") {
+            if (-not (Test-Path "$principale\$f")) { throw "Manca $principale\$f" }
+          }
+          if (-not (Test-Path "output\prova ci_medium\prova ci.json")) { throw "Manca il secondo parere" }
+          $log = Get-Content "$principale\run.log" -Encoding utf8 -Raw
+          if ($log -notmatch "Rete:\s+bloccata dal programma \(Python") { throw "run.log senza la riga Rete attesa" }
+          if ($log -notmatch "RAM massima: \d+ MB") { throw "run.log senza la memoria massima" }
+          if (Get-ChildItem output -Force -Filter ".*parziale") { throw "Cartella parziale rimasta" }
+          $dati = Get-Content "$principale\prova ci.json" -Encoding utf8 -Raw | ConvertFrom-Json
+          $parole = @($dati.segments | ForEach-Object { $_.words }).Count
+          "Segmenti: $(@($dati.segments).Count), parole: $parole"
+          if (@($dati.segments).Count -lt 1 -or $parole -lt 5) { throw "Nessun parlato riconosciuto nel JSON" }
+          $verifica = Get-Content "$principale\da_verificare.json" -Encoding utf8 -Raw | ConvertFrom-Json
+          if ($null -eq $verifica.riepilogo) { throw "da_verificare.json senza riepilogo" }
+          Get-Content "$principale\da_verificare.txt" -Encoding utf8 -TotalCount 3

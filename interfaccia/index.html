@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhisperLocal</title>
+<link rel="icon" href="/static/icona.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/stile.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+<header class="testata">
+  <a class="marchio" href="#/"><img src="/static/icona.svg" alt="" width="22" height="22"> WhisperLocal</a>
+  <nav class="navigazione">
+    <a href="#/" data-vista="trascrivi">Trascrivi</a>
+    <a href="#/archivio" data-vista="archivio">Archivio</a>
+  </nav>
+  <a id="indicatore" class="indicatore" href="#/" hidden></a>
+</header>
+
+<main>
+  <!-- Nuova trascrizione e lavori in coda -->
+  <section id="vista-trascrivi" class="vista stretta" hidden>
+    <div class="scheda">
+      <h1>Nuova trascrizione</h1>
+      <label id="zona" class="zona">
+        <input id="scelta-file" class="nascosto" type="file" multiple
+               accept="audio/*,video/*,.mp3,.m4a,.wav,.flac,.ogg,.opus,.mp4,.mov,.mkv,.webm">
+        <strong>Trascina qui i file audio o video</strong>
+        <span>oppure fai clic per sceglierli</span>
+      </label>
+      <ul id="file-scelti" class="file-scelti"></ul>
+      <label class="campo">
+        <span class="etichetta">Nomi e termini attesi <em>(facoltativo)</em></span>
+        <textarea id="parole" rows="2" placeholder="Mario Rossi, ETF obbligazionario, business case"></textarea>
+        <small>Separati da virgola. Aiutano a scriverli giusti; a volte causano frasi ripetute, che vengono comunque segnalate.</small>
+      </label>
+      <label class="spunta">
+        <input id="diarize" type="checkbox" aria-controls="campo-speakers" aria-expanded="false">
+        <span>Distingui chi parla <small>assegna etichette SPEAKER_00, SPEAKER_01…; richiede più tempo</small></span>
+      </label>
+      <label id="campo-speakers" class="campo" hidden>
+        <span class="etichetta">Numero di interlocutori <em>(facoltativo)</em></span>
+        <input id="speakers" type="number" min="1" max="99" step="1" value="2" disabled aria-describedby="aiuto-speakers">
+        <small id="aiuto-speakers">Lascia vuoto per rilevarlo automaticamente. Le etichette distinguono le voci, senza identificarle per nome.</small>
+      </label>
+      <label class="spunta">
+        <input id="senza-verifica" type="checkbox">
+        <span>Senza verifica <small>circa il doppio più veloce, ma non trova allucinazioni né punti dubbi</small></span>
+      </label>
+      <div class="azioni">
+        <button id="avvia" class="primario" disabled>Trascrivi</button>
+      </div>
+    </div>
+
+    <div class="scheda">
+      <h2>Lavori</h2>
+      <p id="nessun-lavoro" class="vuoto">Nessuna trascrizione avviata da quando hai aperto la pagina.</p>
+      <ul id="lavori" class="lavori"></ul>
+    </div>
+  </section>
+
+  <!-- Archivio delle trascrizioni -->
+  <section id="vista-archivio" class="vista stretta" hidden>
+    <div class="scheda">
+      <h1>Archivio</h1>
+      <p id="archivio-vuoto" class="vuoto" hidden>Nessuna trascrizione ancora.</p>
+      <ul id="archivio" class="archivio"></ul>
+    </div>
+  </section>
+
+  <!-- Verifica e correzione -->
+  <section id="vista-editor" class="vista" hidden>
+    <div class="barra-editor">
+      <div class="riga">
+        <a href="#/archivio" class="indietro">← Archivio</a>
+        <h1 id="editor-titolo"></h1>
+        <span id="stato-salvataggio" class="stato-salvataggio"></span>
+        <button id="salva" class="primario">Salva</button>
+      </div>
+      <div class="riga lettore">
+        <audio id="audio" controls preload="metadata"></audio>
+        <label class="velocita">Velocità
+          <select id="velocita">
+            <option value="0.75">0,75×</option>
+            <option value="1" selected>1×</option>
+            <option value="1.25">1,25×</option>
+            <option value="1.5">1,5×</option>
+            <option value="2">2×</option>
+          </select>
+        </label>
+        <label class="spunta compatta"><input id="segui" type="checkbox" checked> <span>Segui l'audio</span></label>
+      </div>
+      <p class="suggerimento">
+        <kbd>Esc</kbd> play/pausa (riparte 1 s prima) · clic su un tempo: ascolta da lì ·
+        clic su un punto da verificare: ascolta e seleziona la parola · <kbd id="tasto-salva">⌘S</kbd> salva
+      </p>
+    </div>
+    <div class="editor">
+      <ol id="segmenti" class="segmenti"></ol>
+      <aside class="punti">
+        <div class="punti-testa">
+          <h2>Da verificare</h2>
+          <label class="spunta compatta"><input id="nascondi-controllati" type="checkbox"> <span>Nascondi controllati</span></label>
+        </div>
+        <div id="filtri" class="filtri" role="tablist"></div>
+        <p id="punti-vuoto" class="vuoto" hidden></p>
+        <ul id="punti" class="lista-punti"></ul>
+      </aside>
+    </div>
+  </section>
+</main>
+
+<div id="avviso" class="avviso" role="status" hidden></div>
+</body>
+</html>

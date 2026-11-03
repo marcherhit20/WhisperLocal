@@ -1,0 +1,20 @@
+# Registrazioni e trascrizioni: restano solo su questo computer, mai nella cronologia
+input/
+output/
+
+# Ambiente Python (si ricrea, e contiene percorsi fissi di questo computer)
+.venv/
+__pycache__/
+*.pyc
+
+# File di sistema macOS e Windows
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Note di passaggio tra assistenti e materiali di revisione: restano solo su questo computer
+HANDOFF.md
+.review-codex/
+
+# FFmpeg portatile per Windows (si scarica a parte, vedi README)
+strumenti/

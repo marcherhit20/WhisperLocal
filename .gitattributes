@@ -1,0 +1,4 @@
+# Fine riga: LF ovunque (gli script macOS non funzionano con CRLF), CRLF per i .bat di Windows
+* text=auto eol=lf
+*.bat text eol=crlf
+*.svg text eol=lf
